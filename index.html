@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>RiskMirror</title>
+<meta name="description" content="Check a bet against your own limits before you place it.">
+<meta name="theme-color" content="#f1f4f3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1514" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="RiskMirror">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column, a four-step flow (profile, bet, check-in, result) plus a history ledger.
+   Meters are drawn to scale from 0 to 100% with the user's caution threshold marked on the track. */
+:root {
+  --bg: #f1f4f3;
+  --surface: #ffffff;
+  --fg: #13201f;
+  --muted: #566866;
+  --line: #d3dcda;
+  --accent: #0e6a65;
+  --accent-fg: #ffffff;
+  --accent-soft: #e0efed;
+  --ok: #1b7a4b;
+  --ok-bg: #e2f3ea;
+  --warn: #9a5b00;
+  --warn-bg: #fbefd6;
+  --stop: #b0251d;
+  --stop-bg: #fbe4e1;
+  --font-display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1514;
+    --surface: #152120;
+    --fg: #e5efed;
+    --muted: #91a5a2;
+    --line: #263836;
+    --accent: #4fc4ba;
+    --accent-fg: #04201e;
+    --accent-soft: #17302e;
+    --ok: #62d094;
+    --ok-bg: #153325;
+    --warn: #f0b45c;
+    --warn-bg: #3a2c12;
+    --stop: #ff8f85;
+    --stop-bg: #3d1a17;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1514;
+  --surface: #152120;
+  --fg: #e5efed;
+  --muted: #91a5a2;
+  --line: #263836;
+  --accent: #4fc4ba;
+  --accent-fg: #04201e;
+  --accent-soft: #17302e;
+  --ok: #62d094;
+  --ok-bg: #153325;
+  --warn: #f0b45c;
+  --warn-bg: #3a2c12;
+  --stop: #ff8f85;
+  --stop-bg: #3d1a17;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.app { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+h1, h2, h3 { font-family: var(--font-display); margin: 0; text-wrap: balance; line-height: 1.15; }
+h2 { font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+h3 { font-size: 16px; font-weight: 700; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand { font-family: var(--font-display); font-weight: 700; font-size: 26px; letter-spacing: -0.02em; }
+.brand span { color: var(--accent); }
+.tagline { color: var(--muted); font-size: 13px; }
+
+nav { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 4px; }
+nav button { font: inherit; font-size: 13px; font-weight: 500; color: var(--muted); background: transparent; border: 0; border-radius: 7px; padding: 9px 2px; cursor: pointer; min-width: 0; }
+nav button .n { font-family: var(--font-num); font-size: 11px; display: block; opacity: .7; }
+nav button[aria-current="page"] { background: var(--accent); color: var(--accent-fg); }
+nav button:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } .panel { padding: 16px; } }
+
+label.field { display: flex; flex-direction: column; gap: 5px; font-weight: 500; font-size: 14px; }
+label.field .hint { font-weight: 400; color: var(--muted); font-size: 12.5px; }
+input[type="number"], input[type="text"], select, textarea {
+  font: inherit; font-family: var(--font-num); color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; width: 100%; min-width: 0;
+}
+input[type="text"] { font-family: var(--font-body); }
+.affix { display: flex; align-items: stretch; }
+.affix > span { display: flex; align-items: center; padding: 0 12px; background: var(--accent-soft); border: 1px solid var(--line); border-right: 0; border-radius: 8px 0 0 8px; font-family: var(--font-num); color: var(--muted); }
+.affix > span.after { border: 1px solid var(--line); border-left: 0; border-radius: 0 8px 8px 0; }
+.affix input { border-radius: 0 8px 8px 0; }
+.affix > span.after + input, .affix input:has(+ span.after) { border-radius: 8px 0 0 8px; }
+
+.btn { font: inherit; font-weight: 600; border-radius: 9px; padding: 11px 18px; cursor: pointer; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-fg); }
+.btn.ghost { background: transparent; color: var(--accent); }
+.btn.quiet { background: transparent; color: var(--muted); border-color: var(--line); font-weight: 500; }
+.btn.big { padding: 15px 20px; font-size: 16px; width: 100%; }
+.btn.danger { background: var(--stop); border-color: var(--stop); color: var(--surface); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { font: inherit; font-size: 14px; color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; cursor: pointer; text-align: left; }
+.chip[aria-pressed="true"], .chip[aria-checked="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--fg); font-weight: 600; }
+.chip.lvl2[aria-pressed="true"] { background: var(--stop-bg); border-color: var(--stop); }
+.chip.lvl1[aria-pressed="true"] { background: var(--warn-bg); border-color: var(--warn); }
+
+.banner { border-radius: 9px; padding: 10px 14px; font-size: 13.5px; background: var(--accent-soft); }
+.banner.warn { background: var(--warn-bg); }
+.banner.stop { background: var(--stop-bg); }
+
+.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 480px) { .metrics { grid-template-columns: 1fr; } }
+.metric { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.metric .k { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.metric .v { font-family: var(--font-num); font-size: 26px; font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.metric .d { font-size: 12.5px; color: var(--muted); }
+
+.meter { display: flex; flex-direction: column; gap: 6px; }
+.meter .top { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; flex-wrap: wrap; }
+.track { position: relative; height: 14px; border-radius: 7px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
+.fill { position: absolute; inset: 0 auto 0 0; background: var(--ok); }
+.fill.warn { background: var(--warn); }
+.fill.stop { background: var(--stop); }
+.tick { position: absolute; top: -1px; bottom: -1px; width: 2px; background: var(--fg); opacity: .75; }
+.scale { display: flex; justify-content: space-between; font-family: var(--font-num); font-size: 11px; color: var(--muted); position: relative; height: 14px; }
+.scale .tl { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+
+.status { border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 8px; border: 1px solid transparent; }
+.status.ok { background: var(--ok-bg); border-color: var(--ok); }
+.status.caution { background: var(--warn-bg); border-color: var(--warn); }
+.status.stop { background: var(--stop-bg); border-color: var(--stop); }
+.status .label { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; }
+.status.ok .label { color: var(--ok); } .status.caution .label { color: var(--warn); } .status.stop .label { color: var(--stop); }
+.status h2 { font-size: 26px; }
+ul.reasons { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+ul.reasons li.stop::marker { color: var(--stop); } ul.reasons li.caution::marker { color: var(--warn); }
+
+.summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 560px) { .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 500; }
+td.r, th.r { text-align: right; font-family: var(--font-num); }
+.entry { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.entry .head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; }
+.pill.ok { background: var(--ok-bg); color: var(--ok); } .pill.caution { background: var(--warn-bg); color: var(--warn); } .pill.stop { background: var(--stop-bg); color: var(--stop); } .pill.plain { background: var(--accent-soft); color: var(--fg); }
+.pos { color: var(--ok); } .neg { color: var(--stop); }
+
+footer { font-size: 12.5px; color: var(--muted); display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 14px; }
+footer a { color: var(--accent); }
+#toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 9px; font-size: 14px; max-width: calc(100% - 32px); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 20; }
+#toast.show { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+
+/* standalone-page reset (the artifact host normally supplies this) */
+:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+[hidden] { display: none !important; }
+#installBtn { padding: 7px 14px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <div class="brand">Risk<span>Mirror</span></div>
+    <div class="tagline">Before you place the bet, see what the numbers say.</div>
+    <button class="btn ghost" id="installBtn" type="button" hidden>Install app</button>
+  </header>
+  <nav id="nav" aria-label="Steps"></nav>
+  <main id="main" class="stack"></main>
+  <footer>
+    <p>RiskMirror does not predict winners, and a result inside your limits does not make a bet a good one. Everything you enter stays in this browser.</p>
+    <p>Need to talk to someone? National Gambling Helpline (UK): <span class="num">0808 8020 133</span>, free, 24 hours. <a href="https://www.begambleaware.org" target="_blank" rel="noopener">BeGambleAware</a> · <a href="https://www.gamstop.co.uk" target="_blank" rel="noopener">GAMSTOP self-exclusion</a></p>
+  </footer>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/*LOGIC*/
+var DAY = 864e5;
+var LIMIT_KEYS = ['weeklyBudget', 'weeklyLossLimit', 'maxStake', 'cautionPct'];
+var FLAGS = [
+  { id: 'calm', label: 'Calm and clear-headed', group: 'feel', level: 0 },
+  { id: 'excited', label: 'Excited', group: 'feel', level: 1, prompt: 'Excitement makes odds look better than they are. Would you stake the same amount if you felt flat?' },
+  { id: 'hopeful', label: 'Hopeful that today is my lucky day', group: 'feel', level: 1, prompt: 'Luck does not run in days or streaks. Every bet is priced the same whatever mood you are in.' },
+  { id: 'overconfident', label: 'Sure it will win', group: 'feel', level: 1, prompt: 'No bet is certain. The odds already reflect what the bookmaker knows.' },
+  { id: 'impulsive', label: 'Impulsive, betting right now', group: 'feel', level: 1, prompt: 'Impulse is fast and money is slow to come back. Wait ten minutes, then look again.' },
+  { id: 'greedy', label: 'Going for a much bigger payout', group: 'feel', level: 1, prompt: 'Big payouts come from long odds, and long odds lose far more often than they win.' },
+  { id: 'attached', label: 'It is my team, they cannot let me down', group: 'feel', level: 1, prompt: 'Loyalty to a team is not a probability. Bookmakers price your team like any other.' },
+  { id: 'superstitious', label: 'Following a lucky ritual', group: 'feel', level: 1, prompt: 'Rituals feel like control, but they do not change the result.' },
+  { id: 'anxious', label: 'Anxious', group: 'feel', level: 1, prompt: 'Betting to settle a nervous feeling rarely settles it. Is something else on your mind?' },
+  { id: 'frustrated', label: 'Frustrated or angry', group: 'feel', level: 1, prompt: 'Decisions made angry tend to be larger and faster. A ten minute pause costs nothing.' },
+  { id: 'stressed', label: 'Stressed, want a distraction', group: 'feel', level: 1, prompt: 'A bet adds a new worry on top of the one you already have. Would something else take your mind off it?' },
+  { id: 'bored', label: 'Bored, nothing else to do', group: 'feel', level: 1, prompt: 'Boredom is the cheapest reason to bet and often the costliest. Try a walk or a call first.' },
+  { id: 'lonely', label: 'Lonely, a bet gives me something to follow', group: 'feel', level: 1, prompt: 'Following a bet fills time but not the gap. Is there someone you could message instead?' },
+  { id: 'tired', label: 'Tired', group: 'feel', level: 1, prompt: 'Tiredness weakens judgement about money.' },
+  { id: 'drinking', label: 'Have been drinking', group: 'feel', level: 1, prompt: 'Alcohol loosens decisions about money. Leave any bet until tomorrow.' },
+
+  { id: 'payday', label: 'Just got paid or received money', group: 'trig', level: 1, prompt: 'Payday money already has jobs to do. Is this stake inside the budget you set before payday?' },
+  { id: 'promo', label: 'Saw a promotion or boosted odds', group: 'trig', level: 1, prompt: 'Promotions are built to make a bet look cheaper than it is. Judge the odds on their own.' },
+  { id: 'tip', label: 'A friend or tipster gave me a tip', group: 'trig', level: 1, prompt: 'Tipsters show their wins and rarely their losses. A tip is not an edge until it has held up over many bets.' },
+  { id: 'friends', label: 'Friends are betting or winning', group: 'trig', level: 1, prompt: 'You see other people\'s wins, not their losses. Your budget is yours alone.' },
+  { id: 'fomo', label: 'Afraid of missing out', group: 'trig', level: 1, prompt: 'Missing a bet costs nothing. A bet you regret costs the stake.' },
+  { id: 'bigmatch', label: 'A big match, or my team is playing', group: 'trig', level: 1, prompt: 'Big events draw the biggest stakes. Decide your stake before kick-off, not during it.' },
+  { id: 'live', label: 'Watching live and tempted to bet in-play', group: 'trig', level: 1, prompt: 'In-play prices move in seconds and reward speed over thought.' },
+  { id: 'urgent', label: 'Odds are moving and I feel I must act now', group: 'trig', level: 1, prompt: 'Urgency is a pricing tactic. The next match will have odds too.' },
+  { id: 'addon', label: 'Adding to an accumulator I already have', group: 'trig', level: 1, prompt: 'Each extra leg multiplies the bookmaker\'s margin and the ways the ticket can fail.' },
+  { id: 'missed', label: 'I missed a winner I did not back', group: 'trig', level: 1, prompt: 'A winner you did not back cost you nothing. Regret is not a reason to bet.' },
+  { id: 'lostrecent', label: 'I lost recently', group: 'trig', level: 1, prompt: 'Recent losses push people to bet bigger. If that is happening, say so honestly below.' },
+  { id: 'wonrecent', label: 'I won recently', group: 'trig', level: 1, prompt: 'A recent win makes the next bet feel safer than it is. Winnings are not new budget.' },
+
+  { id: 'chasing', label: 'Trying to win back money I lost', group: 'sit', level: 2, prompt: 'Chasing losses is how a small loss turns into a large one. The next bet has no memory of the last.' },
+  { id: 'hard', label: 'Finding it hard to stop', group: 'sit', level: 2, prompt: 'Finding it hard to stop is a reason to talk to someone, and to take a break from betting today.' },
+  { id: 'essential', label: 'This is money I need for bills, rent or food', group: 'sit', level: 2, prompt: 'Money you need to live on is never betting money.' },
+  { id: 'needwin', label: 'I need this to win to fix a money problem', group: 'sit', level: 2, prompt: 'A bet is not a way out of a money problem. It deepens the hole far more often than it fills it. Free, confidential debt advice is available from StepChange and MoneyHelper.' }
+];
+var AFTER = [
+  { id: 'w_happy', out: 'won', label: 'Happy and relieved', level: 0 },
+  { id: 'w_over', out: 'won', label: 'Feel like I have mastered this', level: 1, prompt: 'One win says little about skill. Short runs of results are mostly luck.' },
+  { id: 'w_greed', out: 'won', label: 'Want to turn the winnings into something bigger', level: 1, prompt: 'Winnings are not new budget. Withdraw them or set them aside before you decide anything else.' },
+  { id: 'w_again', out: 'won', label: 'Want to bet again right now', level: 1, prompt: 'The urge to follow a win with another bet is strongest in the first hour. Wait it out.' },
+  { id: 'w_stake', out: 'won', label: 'Wish I had staked more', level: 1, prompt: 'Regret over a smaller win leads to bigger stakes next time. Your limits were set for a reason.' },
+  { id: 'w_calm', out: 'won', label: 'Calm, ready to stop', level: 0 },
+  { id: 'l_sad', out: 'lost', label: 'Sad or disappointed', level: 0 },
+  { id: 'l_angry', out: 'lost', label: 'Angry at the team, referee or bookmaker', level: 1, prompt: 'Anger looks for somewhere to go. Another bet is the worst place for it.' },
+  { id: 'l_regret', out: 'lost', label: 'Regret or shame', level: 1, prompt: 'Regret and shame are common and nothing to hide. Telling someone you trust lightens them.' },
+  { id: 'l_near', out: 'lost', label: 'It was a near miss', level: 1, prompt: 'A near miss feels like almost winning, but it is a loss like any other.' },
+  { id: 'l_revenge', out: 'lost', label: 'Want to bet again to win it back', level: 2, prompt: 'Betting to recover a loss is how losses grow. The next bet owes you nothing.' },
+  { id: 'l_desp', out: 'lost', label: 'Desperate to get the money back', level: 2, prompt: 'Feeling desperate is a signal to stop and talk to someone, not to bet.' },
+  { id: 'l_hopeless', out: 'lost', label: 'Hopeless, like nothing works for me', level: 2, prompt: 'That feeling matters more than the money. Please speak to someone today. National Gambling Helpline (UK): 0808 8020 133.' },
+  { id: 'l_bills', out: 'lost', label: 'Worried about bills or daily expenses', level: 2, prompt: 'If this loss touches money you need to live on, free confidential help is available on 0808 8020 133 (National Gambling Helpline, UK).' },
+  { id: 'l_accept', out: 'lost', label: 'Accepting: losing is part of betting', level: 0 },
+  { id: 'l_cut', out: 'lost', label: 'Want to cut my stakes or take a break', level: 0 }
+];
+function flagById(id) { return FLAGS.filter(function (f) { return f.id === id; })[0]; }
+function afterById(id) { return AFTER.filter(function (f) { return f.id === id; })[0]; }
+function weekStart(t) { var d = new Date(t); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return d.getTime(); }
+function net(e) { if (e.outcome === 'won') return e.payout - e.stake; if (e.outcome === 'lost') return -e.stake; return 0; }
+function weekState(p, entries, now) {
+  var ws = weekStart(now);
+  var placed = entries.filter(function (e) { return e.decision === 'placed' && e.outcome !== 'void' && e.ts >= ws; });
+  var staked = 0, netLoss = 0;
+  placed.forEach(function (e) { staked += e.stake; netLoss += e.outcome === 'pending' ? e.stake : -net(e); });
+  return { staked: staked, netLoss: netLoss, remBudget: Math.max(0, p.weeklyBudget - staked), remLimit: Math.max(0, p.weeklyLossLimit - netLoss) };
+}
+function money(n) { return '£' + Number(n).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function sAt(e) { return e.settledAt || e.ts; }
+function recentContext(entries, now) {
+  var done = entries.filter(function (e) { return e.decision === 'placed' && (e.outcome === 'won' || e.outcome === 'lost'); }).sort(function (a, b) { return sAt(a) - sAt(b); });
+  var last = done.length ? done[done.length - 1] : null;
+  var res = { lostRecent: null, wonRecent: null, streak: 0, avg: 0 };
+  if (last && now - sAt(last) <= DAY) { if (last.outcome === 'lost') res.lostRecent = last; else res.wonRecent = last; }
+  for (var i = done.length - 1; i >= 0 && done[i].outcome === 'lost'; i--) res.streak++;
+  var recent = entries.filter(function (e) { return e.decision === 'placed' && e.outcome !== 'void'; }).sort(function (a, b) { return b.ts - a.ts; }).slice(0, 3);
+  if (recent.length >= 2) res.avg = recent.reduce(function (a, e) { return a + e.stake; }, 0) / recent.length;
+  return res;
+}
+function patterns(entries) {
+  var placed = entries.filter(function (e) { return e.decision === 'placed' && e.outcome !== 'void'; }).sort(function (a, b) { return a.ts - b.ts; });
+  var r = { total: placed.length, afterLoss: 0, afterLossBigger: 0, afterWin: 0, afterWinBigger: 0, inLimits: 0 };
+  placed.forEach(function (b, i) {
+    if (b.status === 'ok') r.inLimits++;
+    var prev = null;
+    for (var j = i - 1; j >= 0; j--) { if (placed[j].outcome === 'won' || placed[j].outcome === 'lost') { prev = placed[j]; break; } }
+    if (!prev) return;
+    var gap = b.ts - sAt(prev);
+    if (gap < 0 || gap > DAY) return;
+    if (prev.outcome === 'lost') { r.afterLoss++; if (b.stake > prev.stake) r.afterLossBigger++; }
+    else { r.afterWin++; if (b.stake > prev.stake * 1.25) r.afterWinBigger++; }
+  });
+  return r;
+}
+function assess(p, bet, flags, breakUntil, entries, now) {
+  var stake = +bet.stake, odds = +bet.odds;
+  if (!(stake > 0) || !(odds > 1)) return { valid: false };
+  var w = weekState(p, entries, now);
+  var exposure = w.remBudget > 0 ? stake / w.remBudget * 100 : Infinity;
+  var limitUse = w.remLimit > 0 ? stake / w.remLimit * 100 : Infinity;
+  var implied = 100 / odds;
+  var reasons = [];
+  function add(level, text) { reasons.push({ level: level, text: text }); }
+  if (breakUntil > now) add('stop', 'You set a break from betting that runs until ' + new Date(breakUntil).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + '.');
+  if (w.remBudget <= 0) add('stop', 'Your gambling budget for this week is used up.');
+  else if (stake > w.remBudget) add('stop', 'The stake is more than the ' + money(w.remBudget) + ' left in this week\'s budget.');
+  if (stake > p.maxStake) add('stop', 'The stake is above your single-bet cap of ' + money(p.maxStake) + '.');
+  if (w.remLimit <= 0) add('stop', 'You have reached your weekly loss limit.');
+  else if (stake > w.remLimit) add('stop', 'Losing this bet would take you past your weekly loss limit. ' + money(w.remLimit) + ' of the limit remains.');
+  flags.forEach(function (id) { var f = flagById(id); if (f && f.level === 2) add('stop', 'You said: "' + f.label + '".'); });
+  if (isFinite(exposure) && exposure >= p.cautionPct && exposure <= 100) add('caution', 'The stake is ' + exposure.toFixed(1) + '% of what is left in your weekly budget. Your caution line is ' + p.cautionPct + '%.');
+  flags.forEach(function (id) { var f = flagById(id); if (f && f.level === 1) add('caution', 'You said you feel: ' + f.label.toLowerCase() + '.'); });
+  if (implied < 10) add('caution', 'At these odds the market gives it about a ' + implied.toFixed(1) + '% chance. Most bets like this lose.');
+  var c = recentContext(entries, now);
+  if (c.lostRecent) {
+    var hrs = Math.max(1, Math.round((now - sAt(c.lostRecent)) / 36e5));
+    add('caution', 'You lost ' + money(c.lostRecent.stake) + ' about ' + hrs + ' hour' + (hrs === 1 ? '' : 's') + ' ago. Check you are not trying to win it back.');
+    if (stake > c.lostRecent.stake) add('caution', 'This stake is bigger than the bet you just lost, a common sign of chasing.');
+  }
+  if (c.wonRecent) add('note', 'You won recently. Winnings are not new budget: your weekly budget has not changed.');
+  if (c.avg && stake > c.avg * 1.5) add('caution', 'This stake is ' + (stake / c.avg).toFixed(1) + ' times your recent average of ' + money(c.avg) + '. Raising stakes after a run is a common trap.');
+  if (c.streak >= 3) add('caution', c.streak + ' losses in a row. Decisions tend to get worse during a run of losses.');
+  if (bet.type === 'acca') add('note', 'Accumulators multiply the bookmaker\'s margin across every leg, so the odds are worse than they look.');
+  if (bet.type === 'inplay') add('note', 'In-play betting rewards speed over thought. Decide before the next price appears.');
+  var status = reasons.some(function (r) { return r.level === 'stop'; }) ? 'stop' : reasons.some(function (r) { return r.level === 'caution'; }) ? 'caution' : 'ok';
+  return { valid: true, stake: stake, odds: odds, w: w, exposure: exposure, limitUse: limitUse, implied: implied, afterLoss: w.remBudget - stake, profit: stake * (odds - 1), status: status, reasons: reasons };
+}
+function applyPending(S, now) {
+  var ch = false;
+  Object.keys(S.pending).forEach(function (k) { if (S.pending[k].at <= now) { S.profile[k] = S.pending[k].value; delete S.pending[k]; ch = true; } });
+  return ch;
+}
+function submitProfile(S, vals, now) {
+  LIMIT_KEYS.forEach(function (k) {
+    var v = Number(vals[k]);
+    if (!isFinite(v) || v < 0) return;
+    if (k === 'cautionPct') v = Math.min(100, Math.max(1, v));
+    if (v <= S.profile[k]) { S.profile[k] = v; delete S.pending[k]; }
+    else if (!(S.pending[k] && S.pending[k].value === v)) S.pending[k] = { value: v, at: now + DAY };
+  });
+  S.profile.savedAt = now;
+}
+/*END LOGIC*/
+
+var KEY = 'riskmirror.v1';
+function defaults() {
+  return {
+    profile: { weeklyBudget: 200, weeklyLossLimit: 100, maxStake: 20, cautionPct: 25, savedAt: null },
+    pending: {}, breakUntil: 0,
+    draft: { stake: 10, odds: 2.5, type: 'single', note: '', flags: [] },
+    entries: [], tab: 'profile'
+  };
+}
+var S = defaults();
+try {
+  var raw = localStorage.getItem(KEY);
+  if (raw) { var o = JSON.parse(raw); S = Object.assign(defaults(), o); S.profile = Object.assign(defaults().profile, o.profile || {}); S.draft = Object.assign(defaults().draft, o.draft || {}); }
+} catch (e) {}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+if (applyPending(S, Date.now())) save();
+
+function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function fdate(t) { return new Date(t).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+function pct(n) { return isFinite(n) ? n.toFixed(1) + '%' : 'None left'; }
+var toastTimer;
+function toast(msg) { var t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2800); }
+
+var TABS = [['profile', 'Profile'], ['bet', 'Bet'], ['check', 'Check-in'], ['result', 'Result'], ['history', 'History']];
+function renderNav() {
+  document.getElementById('nav').innerHTML = TABS.map(function (t, i) {
+    return '<button type="button" data-tab="' + t[0] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + '><span class="n">' + (i + 1) + '</span>' + t[1] + '</button>';
+  }).join('');
+}
+function go(tab) { S.tab = tab; save(); render(); window.scrollTo(0, 0); }
+
+function meter(label, value, threshold, thresholdLabel, status) {
+  var capped = isFinite(value) ? Math.min(100, value) : 100;
+  var cls = status === 'stop' ? 'stop' : status === 'caution' ? 'warn' : '';
+  var tickHtml = threshold != null ? '<div class="tick" style="left:' + threshold + '%"></div>' : '';
+  var tl = threshold != null ? '<span class="tl" style="left:' + Math.min(92, Math.max(8, threshold)) + '%">' + thresholdLabel + '</span>' : '';
+  return '<div class="meter"><div class="top"><span>' + label + '</span><span class="num">' + (isFinite(value) ? value.toFixed(1) + '%' : 'No budget left') + (isFinite(value) && value > 100 ? ' (over)' : '') + '</span></div>' +
+    '<div class="track" role="img" aria-label="' + label + ' ' + (isFinite(value) ? value.toFixed(1) + ' percent' : 'none left') + '"><div class="fill ' + cls + '" style="width:' + capped + '%"></div>' + tickHtml + '</div>' +
+    '<div class="scale"><span>0%</span>' + tl + '<span>100%</span></div></div>';
+}
+
+function viewProfile() {
+  var p = S.profile, now = Date.now(), pend = S.pending;
+  var fields = [
+    ['weeklyBudget', 'Weekly gambling budget', 'Money you can afford to lose, set aside for the week.', '£'],
+    ['weeklyLossLimit', 'Weekly loss limit', 'The most you are willing to be down by in a week.', '£'],
+    ['maxStake', 'Largest single stake', 'No single bet above this.', '£'],
+    ['cautionPct', 'Caution line', 'Warn me when a stake uses this share of the budget left.', '%']
+  ];
+  var fhtml = fields.map(function (f) {
+    var k = f[0], pe = pend[k];
+    var after = f[3] === '%';
+    return '<label class="field" for="f-' + k + '">' + f[1] + '<span class="hint">' + f[2] + '</span>' +
+      '<div class="affix">' + (after ? '' : '<span>' + f[3] + '</span>') + '<input type="number" id="f-' + k + '" inputmode="decimal" min="0" step="' + (after ? 1 : 1) + '" value="' + p[k] + '">' + (after ? '<span class="after">%</span>' : '') + '</div>' +
+      (pe ? '<span class="hint" style="color:var(--warn)">Increase to ' + (after ? pe.value + '%' : money(pe.value)) + ' takes effect ' + fdate(pe.at) + '.</span>' : '') + '</label>';
+  }).join('');
+  var brk = S.breakUntil > now;
+  return '<section class="panel"><div class="stack"><h2>Your limits</h2><p class="muted">Set these when you are calm, before any bet. RiskMirror checks every bet against them.</p></div>' +
+    (p.savedAt ? '' : '<div class="banner">These are example values. Change them to your own and save.</div>') +
+    '<div class="grid2">' + fhtml + '</div>' +
+    '<div class="banner">Lowering a limit applies straight away. Raising a limit waits 24 hours, so a bad moment cannot loosen your rules.</div>' +
+    '<div class="row"><button class="btn" type="button" data-act="saveProfile">Save limits</button></div></section>' +
+    '<section class="panel"><div class="stack"><h2>Take a break</h2><p class="muted">While a break runs, every bet you check shows Stop. A break can be extended but not shortened.</p></div>' +
+    (brk ? '<div class="banner stop">Break active until ' + fdate(S.breakUntil) + '.</div>' : '') +
+    '<div class="chips"><button class="chip" type="button" data-act="break" data-days="1">24 hours</button><button class="chip" type="button" data-act="break" data-days="3">3 days</button><button class="chip" type="button" data-act="break" data-days="7">7 days</button><button class="chip" type="button" data-act="break" data-days="30">30 days</button></div></section>';
+}
+
+function viewBet() {
+  var d = S.draft;
+  var types = [['single', 'Single'], ['acca', 'Accumulator'], ['inplay', 'In-play']];
+  return '<section class="panel"><div class="stack"><h2>The bet</h2><p class="muted">Enter what you are about to place. Nothing is sent anywhere.</p></div>' +
+    (S.profile.savedAt && S.entries.length ? '' : '<div class="banner">Example bet shown. Replace it with the real stake and odds.</div>') +
+    '<label class="field" for="b-note">What is the bet? <span class="hint">Optional, for your own history.</span><input type="text" id="b-note" maxlength="80" value="' + esc(d.note) + '"></label>' +
+    '<div class="grid2"><label class="field" for="b-stake">Stake<div class="affix"><span>£</span><input type="number" id="b-stake" inputmode="decimal" min="0" step="0.5" value="' + esc(d.stake) + '"></div></label>' +
+    '<label class="field" for="b-odds">Decimal odds<span class="hint">For example 2.50 pays £2.50 per £1, stake included.</span><input type="number" id="b-odds" inputmode="decimal" min="1" step="0.01" value="' + esc(d.odds) + '"></label></div>' +
+    '<div class="stack"><span style="font-weight:500;font-size:14px" id="b-type-l">Type of bet</span><div class="chips" role="radiogroup" aria-labelledby="b-type-l">' +
+    types.map(function (t) { return '<button type="button" class="chip" role="radio" aria-checked="' + (d.type === t[0]) + '" data-act="type" data-type="' + t[0] + '">' + t[1] + '</button>'; }).join('') + '</div></div>' +
+    '<div id="betPreview"></div>' +
+    '<div class="row"><button class="btn" type="button" data-act="toCheck">Next: how are you feeling</button></div></section>';
+}
+function updateBetPreview() {
+  var el = document.getElementById('betPreview'); if (!el) return;
+  var a = assess(S.profile, S.draft, [], 0, S.entries, Date.now());
+  if (!a.valid) { el.innerHTML = '<div class="banner warn">Enter a stake above £0 and decimal odds above 1.00.</div>'; return; }
+  el.innerHTML = '<div class="metrics">' +
+    '<div class="metric"><span class="k">If you lose</span><span class="v">' + money(a.stake) + '</span><span class="d">Budget left after: ' + money(Math.max(0, a.afterLoss)) + '</span></div>' +
+    '<div class="metric"><span class="k">If you win</span><span class="v">' + money(a.profit) + '</span><span class="d">Net profit, plus your stake back</span></div>' +
+    '<div class="metric"><span class="k">Odds imply</span><span class="v">' + a.implied.toFixed(1) + '%</span><span class="d">Chance of winning, bookmaker margin included</span></div></div>';
+}
+
+function viewCheck() {
+  var fl = S.draft.flags, now = Date.now();
+  var c = recentContext(S.entries, now), lines = [];
+  if (c.lostRecent) lines.push('You lost ' + money(c.lostRecent.stake) + ' recently. If you are trying to win it back, tick that below.');
+  if (c.wonRecent) lines.push('You won recently. Winnings are not new budget.');
+  if (c.streak >= 3) lines.push(c.streak + ' losses in a row.');
+  var ctx = lines.length ? '<div class="banner warn"><strong>From your history.</strong> ' + lines.join(' ') + '</div>' : '';
+  function group(g, title, sub) {
+    return '<div class="stack"><h3>' + title + '</h3><p class="muted small">' + sub + '</p><div class="chips">' + FLAGS.filter(function (f) { return f.group === g; }).map(function (f) {
+      return '<button type="button" class="chip lvl' + f.level + '" aria-pressed="' + (fl.indexOf(f.id) > -1) + '" data-act="flag" data-id="' + f.id + '">' + f.label + '</button>';
+    }).join('') + '</div></div>';
+  }
+  var prompts = fl.map(flagById).filter(function (f) { return f && f.prompt; }).sort(function (a, b) { return b.level - a.level; }).map(function (f) {
+    return '<div class="banner ' + (f.level === 2 ? 'stop' : 'warn') + '"><strong>' + f.label + '.</strong> ' + f.prompt + '</div>';
+  }).join('');
+  return '<section class="panel"><div class="stack"><h2>How are you feeling?</h2><p class="muted">Feelings are information. Pick everything that is true right now. This changes the warnings, not the maths.</p></div>' + ctx +
+    group('feel', 'Mood', 'How you feel as you look at this bet.') +
+    group('trig', 'What set this off', 'The thing that put a bet in your head.') +
+    group('sit', 'Money pressure', 'Anything here stops the bet from showing as safe.') +
+    (prompts ? '<div class="stack"><h3>Worth reading</h3>' + prompts + '</div>' : '') +
+    '<div class="row"><button class="btn" type="button" data-act="toResult">See the RiskMirror result</button></div></section>';
+}
+
+function viewResult() {
+  var a = assess(S.profile, S.draft, S.draft.flags, S.breakUntil, S.entries, Date.now());
+  if (!a.valid) return '<section class="panel"><h2>No bet to check yet</h2><p class="muted">Enter a stake and decimal odds first.</p><div class="row"><button class="btn" type="button" data-tab="bet">Go to the bet</button></div></section>';
+  var p = S.profile;
+  var head = { ok: ['Within your limits', 'This bet is inside the limits you set. That does not make it a good bet. Odds alone cannot show that.'], caution: ['Pause and check', 'Nothing here breaks your limits, but something below deserves a second look before you place it.'], stop: ['Stop: outside your limits', 'This bet breaks a limit you set while calm, or you told us something that means today is not a day to bet.'] }[a.status];
+  var over = a.reasons.length ? '<ul class="reasons">' + a.reasons.map(function (r) { return '<li class="' + r.level + '">' + esc(r.text) + '</li>'; }).join('') + '</ul>' : '';
+  var story = 'You are risking <strong>' + money(a.stake) + '</strong>. ' + (isFinite(a.exposure) ? 'That is <strong>' + a.exposure.toFixed(1) + '%</strong> of the ' + money(a.w.remBudget) + ' left in this week\'s budget. If you lose, <strong>' + money(Math.max(0, a.afterLoss)) + '</strong> is left. ' : 'Your budget for this week is already used up. ') +
+    'At odds of ' + a.odds.toFixed(2) + ' the market gives this a ' + a.implied.toFixed(1) + '% chance of winning and a ' + (100 - a.implied).toFixed(1) + '% chance of losing, before the bookmaker\'s margin.';
+  var confirm = S.pendingPlace;
+  var placeBlock = a.status === 'stop' && confirm ?
+    '<div class="banner stop">This will be logged as a limit breach in your history. RiskMirror cannot stop a bet, but it will keep the record.</div><div class="row"><button class="btn danger" type="button" data-act="place">Log it as placed</button><button class="btn quiet" type="button" data-act="cancelPlace">Go back</button></div>' :
+    '<button class="btn quiet" type="button" data-act="' + (a.status === 'stop' ? 'askPlace' : 'place') + '">' + (a.status === 'stop' ? 'I am placing it anyway' : 'I am placing this bet') + '</button>';
+  return '<section class="status ' + a.status + '"><span class="label">Risk status</span><h2>' + head[0] + '</h2><p>' + head[1] + '</p>' + over + '</section>' +
+    '<section class="panel"><p>' + story + '</p>' +
+    '<div class="metrics">' +
+    '<div class="metric"><span class="k">Budget at risk</span><span class="v">' + pct(a.exposure) + '</span><span class="d">Stake ÷ budget left (' + money(a.w.remBudget) + ')</span></div>' +
+    '<div class="metric"><span class="k">Implied win chance</span><span class="v">' + a.implied.toFixed(1) + '%</span><span class="d">100 ÷ decimal odds</span></div>' +
+    '<div class="metric"><span class="k">Loss limit used</span><span class="v">' + pct(a.limitUse) + '</span><span class="d">Stake ÷ limit left (' + money(a.w.remLimit) + ')</span></div></div>' +
+    '<div class="stack">' + meter('Share of weekly budget left', a.exposure, p.cautionPct, 'caution ' + p.cautionPct + '%', a.exposure >= p.cautionPct ? (a.exposure > 100 ? 'stop' : 'caution') : 'ok') +
+    meter('Share of weekly loss limit left', a.limitUse, null, '', a.limitUse > 100 ? 'stop' : a.limitUse >= 75 ? 'caution' : 'ok') + '</div>' +
+    '<p class="muted small">The implied chance comes from the price alone. Whether a bet is worth taking needs an independent estimate of the true chance, and the bookmaker\'s margin means the real chance is usually a little lower than shown.</p></section>' +
+    '<section class="panel"><button class="btn big" type="button" data-act="walk">Walk away: keep ' + money(a.stake) + '</button>' + placeBlock + '</section>';
+}
+
+function afterAdvice(af) {
+  var items = af.map(afterById).filter(function (f) { return f && f.prompt; }).sort(function (a, b) { return b.level - a.level; });
+  var hot = items.some(function (f) { return f.level === 2; });
+  return items.map(function (f) { return '<div class="banner ' + (f.level === 2 ? 'stop' : 'warn') + '"><strong>' + f.label + '.</strong> ' + f.prompt + '</div>'; }).join('') +
+    (hot ? '<div class="row"><button class="btn" type="button" data-act="break" data-days="1">Start a 24-hour break</button></div>' : '');
+}
+function patRow(title, text, caution) { return '<div class="banner' + (caution ? ' warn' : '') + '"><strong>' + title + '.</strong> ' + text + '</div>'; }
+function viewHistory() {
+  var E = S.entries.slice().sort(function (a, b) { return b.ts - a.ts; });
+  var walked = E.filter(function (e) { return e.decision === 'walked'; });
+  var placed = E.filter(function (e) { return e.decision === 'placed' && e.outcome !== 'void'; });
+  var notWagered = walked.reduce(function (a, e) { return a + e.stake; }, 0);
+  var staked = placed.reduce(function (a, e) { return a + e.stake; }, 0);
+  var result = placed.reduce(function (a, e) { return a + net(e); }, 0);
+  var breaches = placed.filter(function (e) { return e.breached; }).length;
+  var sum = '<div class="summary">' +
+    '<div class="metric"><span class="k">Not wagered</span><span class="v">' + money(notWagered) + '</span><span class="d">' + walked.length + ' walk-away' + (walked.length === 1 ? '' : 's') + '</span></div>' +
+    '<div class="metric"><span class="k">Staked</span><span class="v">' + money(staked) + '</span><span class="d">' + placed.length + ' bet' + (placed.length === 1 ? '' : 's') + ' placed</span></div>' +
+    '<div class="metric"><span class="k">Settled result</span><span class="v ' + (result < 0 ? 'neg' : result > 0 ? 'pos' : '') + '">' + (result < 0 ? '−' : result > 0 ? '+' : '') + money(Math.abs(result)) + '</span><span class="d">Won or lost so far</span></div>' +
+    '<div class="metric"><span class="k">Limit breaches</span><span class="v">' + breaches + '</span><span class="d">Bets placed on Stop</span></div></div>';
+  var pt = patterns(S.entries);
+  var pats = pt.total ? '<section class="panel"><div class="stack"><h3>Patterns to watch</h3><p class="muted small">Plain counts from your own history. They show habits, not blame.</p></div><div class="stack">' +
+    patRow('Loss-chasing signs', pt.afterLoss ? pt.afterLoss + ' of ' + pt.total + ' bets were placed within 24 hours of a loss' + (pt.afterLossBigger ? ', ' + pt.afterLossBigger + ' of them with a bigger stake' : '') + '.' : 'No bets were placed within 24 hours of a loss.', pt.afterLoss > 0) +
+    patRow('Stakes after wins', pt.afterWin ? pt.afterWin + ' bets followed a win within 24 hours' + (pt.afterWinBigger ? ', ' + pt.afterWinBigger + ' with a stake over 25% bigger' : '') + '.' : 'No bets followed a win within 24 hours.', pt.afterWinBigger > 0) +
+    patRow('Inside your limits', pt.inLimits + ' of ' + pt.total + ' placed bets showed Within limits.', pt.inLimits < pt.total) + '</div></section>' : '';
+  var rows = FLAGS.filter(function (f) { return f.id !== 'calm'; }).map(function (f) {
+    var withF = E.filter(function (e) { return e.flags.indexOf(f.id) > -1; });
+    if (!withF.length) return '';
+    var w = withF.filter(function (e) { return e.decision === 'walked'; }).length;
+    return '<tr><td>' + f.label + '</td><td class="r">' + withF.length + '</td><td class="r">' + w + '</td><td class="r">' + (withF.length - w) + '</td></tr>';
+  }).join('');
+  var triggers = rows ? '<section class="panel"><div class="stack"><h3>Feelings and triggers</h3><p class="muted small">How often each came up when you checked a bet, and what you did next.</p></div><div class="tablewrap"><table><thead><tr><th>Reported</th><th class="r">Times</th><th class="r">Walked</th><th class="r">Placed</th></tr></thead><tbody>' + rows + '</tbody></table></div></section>' : '';
+  var typeName = { single: 'Single', acca: 'Accumulator', inplay: 'In-play' };
+  var list = E.length ? E.map(function (e) {
+    var fl = e.flags.map(function (id) { var f = flagById(id); return f ? '<span class="pill plain">' + f.label + '</span>' : ''; }).join(' ');
+    var out = '';
+    if (e.decision === 'walked') out = '<span class="pill plain">Walked away</span>';
+    else if (e.outcome === 'pending') out = '<span class="pill caution">Placed, waiting</span>';
+    else if (e.outcome === 'void') out = '<span class="pill plain">Void</span>';
+    else out = '<span class="num ' + (net(e) < 0 ? 'neg' : 'pos') + '">' + (net(e) < 0 ? '−' : '+') + money(Math.abs(net(e))) + '</span>';
+    var settle = e.decision === 'placed' && e.outcome === 'pending' ?
+      '<div class="row"><label class="small" for="pay-' + e.id + '">Total returned</label><div class="affix" style="width:130px"><span>£</span><input type="number" id="pay-' + e.id + '" inputmode="decimal" min="0" step="0.01" value="' + (e.stake * e.odds).toFixed(2) + '"></div>' +
+      '<button class="btn ghost" type="button" data-act="settle" data-id="' + e.id + '" data-out="won">Won</button><button class="btn ghost" type="button" data-act="settle" data-id="' + e.id + '" data-out="lost">Lost</button><button class="btn quiet" type="button" data-act="settle" data-id="' + e.id + '" data-out="void">Void</button></div>' : '';
+    var after = '';
+    if (e.decision === 'placed' && (e.outcome === 'won' || e.outcome === 'lost')) {
+      var af = e.after || [];
+      if (S.afterFor === e.id) {
+        after = '<div class="stack"><h3>How do you feel now?</h3><div class="chips">' + AFTER.filter(function (f) { return f.out === e.outcome; }).map(function (f) {
+          return '<button type="button" class="chip lvl' + f.level + '" aria-pressed="' + (af.indexOf(f.id) > -1) + '" data-act="afterflag" data-id="' + e.id + '" data-flag="' + f.id + '">' + f.label + '</button>';
+        }).join('') + '</div>' + afterAdvice(af) + '<div class="row"><button class="btn ghost" type="button" data-act="afterDone">Done</button></div></div>';
+      } else {
+        after = (af.length ? '<div class="row">' + af.map(function (id) { var f = afterById(id); return f ? '<span class="pill plain">' + f.label + '</span>' : ''; }).join(' ') + '</div>' : '') +
+          '<div class="row"><button class="btn quiet" type="button" data-act="after" data-id="' + e.id + '">' + (af.length ? 'Change how I felt' : 'How do you feel now?') + '</button></div>';
+      }
+    }
+    return '<div class="entry"><div class="head"><span><strong class="num">' + money(e.stake) + '</strong> at <span class="num">' + e.odds.toFixed(2) + '</span> · ' + (typeName[e.type] || 'Bet') + '</span>' + out + '</div>' +
+      (e.note ? '<div>' + esc(e.note) + '</div>' : '') +
+      '<div class="row small muted"><span>' + fdate(e.ts) + '</span><span class="pill ' + e.status + '">' + ({ ok: 'Within limits', caution: 'Caution', stop: 'Stop' }[e.status]) + '</span>' + (e.breached ? '<span class="pill stop">Limit breach</span>' : '') + '</div>' +
+      (fl ? '<div class="row">' + fl + '</div>' : '') + settle + after + '</div>';
+  }).join('') : '<div class="banner">No decisions logged yet. When you check a bet and choose to walk away or place it, it appears here.</div>';
+  var tools = '<section class="panel"><h3>Your data</h3><p class="muted small">Stored only in this browser. Clearing site data removes it.</p><div class="row"><button class="btn quiet" type="button" data-act="copy">Copy data as JSON</button>' +
+    (S.confirmWipe ? '<button class="btn danger" type="button" data-act="wipe">Erase everything</button><button class="btn quiet" type="button" data-act="cancelWipe">Keep it</button>' : '<button class="btn quiet" type="button" data-act="askWipe">Erase all data</button>') + '</div></section>';
+  return '<section class="panel"><h2>History</h2>' + sum + '<p class="muted small">No streaks, no scores to beat. This is a ledger so patterns are easy to see.</p></section>' + pats + triggers + '<section class="panel"><h3>Decisions</h3><div class="stack">' + list + '</div></section>' + tools;
+}
+
+function render() {
+  renderNav();
+  var m = document.getElementById('main');
+  m.innerHTML = { profile: viewProfile, bet: viewBet, check: viewCheck, result: viewResult, history: viewHistory }[S.tab]();
+  if (S.tab === 'bet') updateBetPreview();
+}
+
+function logEntry(placed) {
+  var a = assess(S.profile, S.draft, S.draft.flags, S.breakUntil, S.entries, Date.now());
+  if (!a.valid) return;
+  S.entries.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), ts: Date.now(), stake: a.stake, odds: a.odds, type: S.draft.type, note: S.draft.note, flags: S.draft.flags.slice(), status: a.status, exposure: a.exposure, decision: placed ? 'placed' : 'walked', outcome: placed ? 'pending' : null, breached: placed && a.status === 'stop', after: [], settledAt: null });
+  S.draft.flags = []; S.draft.note = ''; S.pendingPlace = false;
+  save();
+}
+
+document.addEventListener('click', function (ev) {
+  var t = ev.target.closest('[data-tab],[data-act]'); if (!t) return;
+  if (t.dataset.tab) { S.pendingPlace = false; return go(t.dataset.tab); }
+  var act = t.dataset.act, now = Date.now();
+  if (act === 'saveProfile') {
+    var vals = {}; LIMIT_KEYS.forEach(function (k) { vals[k] = document.getElementById('f-' + k).value; });
+    submitProfile(S, vals, now); save(); render(); toast('Limits saved. Any increase starts in 24 hours.');
+  } else if (act === 'break') {
+    S.breakUntil = Math.max(S.breakUntil, now + Number(t.dataset.days) * DAY); save(); render(); toast('Break set until ' + fdate(S.breakUntil) + '.');
+  } else if (act === 'type') { S.draft.type = t.dataset.type; save(); render();
+  } else if (act === 'toCheck') { go('check');
+  } else if (act === 'flag') {
+    var id = t.dataset.id, f = S.draft.flags, i = f.indexOf(id);
+    if (i > -1) f.splice(i, 1);
+    else {
+      if (id === 'calm') { S.draft.flags = f = f.filter(function (x) { var g = flagById(x); return g && g.group !== 'feel'; }); }
+      else if (flagById(id).group === 'feel') { var c = f.indexOf('calm'); if (c > -1) f.splice(c, 1); }
+      f.push(id);
+    }
+    save(); render();
+  } else if (act === 'toResult') { go('result');
+  } else if (act === 'walk') {
+    var a = assess(S.profile, S.draft, S.draft.flags, S.breakUntil, S.entries, now);
+    logEntry(false); go('history'); toast('Walked away. ' + money(a.stake) + ' not wagered.');
+  } else if (act === 'askPlace') { S.pendingPlace = true; render();
+  } else if (act === 'cancelPlace') { S.pendingPlace = false; render();
+  } else if (act === 'place') { logEntry(true); go('history'); toast('Logged as placed.');
+  } else if (act === 'settle') {
+    var e = S.entries.filter(function (x) { return x.id === t.dataset.id; })[0]; if (!e) return;
+    var out = t.dataset.out;
+    if (out === 'won') { var pay = Number(document.getElementById('pay-' + e.id).value); if (!(pay >= 0)) return toast('Enter the total returned.'); e.payout = pay; }
+    e.outcome = out; e.settledAt = now; if (out === 'won' || out === 'lost') S.afterFor = e.id; save(); render();
+  } else if (act === 'after') { S.afterFor = t.dataset.id; save(); render();
+  } else if (act === 'afterflag') {
+    var ae = S.entries.filter(function (x) { return x.id === t.dataset.id; })[0]; if (!ae) return;
+    ae.after = ae.after || []; var ai = ae.after.indexOf(t.dataset.flag);
+    if (ai > -1) ae.after.splice(ai, 1); else ae.after.push(t.dataset.flag);
+    save(); render();
+  } else if (act === 'afterDone') { S.afterFor = null; save(); render(); toast('Saved.');
+  } else if (act === 'copy') {
+    var txt = JSON.stringify({ profile: S.profile, entries: S.entries }, null, 2);
+    (navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function () { toast('Copied to clipboard.'); }, function () { toast('Copy was blocked by the browser.'); });
+  } else if (act === 'askWipe') { S.confirmWipe = true; render();
+  } else if (act === 'cancelWipe') { S.confirmWipe = false; render();
+  } else if (act === 'wipe') { var brk = S.breakUntil; S = defaults(); S.breakUntil = brk; S.tab = 'profile'; save(); render(); toast('Data erased. Any active break is kept.'); }
+});
+document.addEventListener('input', function (ev) {
+  var id = ev.target.id;
+  if (id === 'b-stake') S.draft.stake = ev.target.value;
+  else if (id === 'b-odds') S.draft.odds = ev.target.value;
+  else if (id === 'b-note') S.draft.note = ev.target.value;
+  else return;
+  save(); updateBetPreview();
+});
+render();
+</script>
+<script>
+(function () {
+  var deferred = null, btn = document.getElementById('installBtn');
+  window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); deferred = e; btn.hidden = false; });
+  btn.addEventListener('click', function () {
+    if (!deferred) return;
+    deferred.prompt();
+    deferred.userChoice.then(function () { deferred = null; btn.hidden = true; });
+  });
+  window.addEventListener('appinstalled', function () { btn.hidden = true; });
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+  }
+})();
+</script>
+</body>
+</html>
